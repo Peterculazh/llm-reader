@@ -1,114 +1,178 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# LLM Reader
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Upload a document with a prompt and get the answer from a local LLM later.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+The API stores the file in S3-compatible storage, records a run in Postgres and publishes a Kafka event. A separate worker picks the event up, extracts the document's content and sends it to [Ollama](https://ollama.com). You then fetch the result by run ID.
 
-## Description
+```text
+client ──POST /──▶ API ──▶ S3 (file)
+                    │  ──▶ Postgres (document + run, status: queued)
+                    └────▶ Kafka: document.process { runId }
+                                     │
+                                     ▼
+                                  worker ──▶ S3 (read file)
+                                     │   ──▶ Ollama (/api/chat)
+                                     └────▶ Postgres (status: done | failed)
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Project setup
-
-```bash
-$ npm install
+client ──GET /:runId──▶ API ──▶ Postgres
 ```
 
-## Compile and run the project
+## Supported documents
+
+Uploads are capped at 20 MB.
+
+| Type | Content type                                                              | How it's read                                                                     |
+| ---- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| PDF  | `application/pdf`                                                         | Text layer. If there is none, the first 10 pages are sent to the model as images. |
+| Word | `application/vnd.openxmlformats-officedocument.wordprocessingml.document` | Plain text extracted with mammoth.                                                |
+| Text | `text/plain`, `text/markdown`                                             | As is.                                                                            |
+
+Scanned PDFs need a vision model. The default, `qwen3-vl:2b`, is one.
+
+## Repository layout
+
+This is a Nest monorepo with two apps and shared libraries.
+
+| Path              | What it is                                                  |
+| ----------------- | ----------------------------------------------------------- |
+| `apps/llm-reader` | HTTP API: accepts uploads and returns results.              |
+| `apps/worker`     | Kafka consumer: extracts document content and calls Ollama. |
+| `libs/contracts`  | Kafka topics and their payloads, shared by both apps.       |
+| `libs/events`     | Publisher/consumer abstraction over Kafka.                  |
+| `libs/storage`    | Object storage abstraction over S3, plus upload limits.     |
+| `libs/db`         | Drizzle schema, migrations and `DocumentsRepository`.       |
+| `docker/`         | Config mounted into the compose services.                   |
+
+## Prerequisites
+
+- Node.js (the project is typed against Node 24)
+- Docker with Compose
+- [Ollama](https://ollama.com) running on the host, with the model pulled:
+
+  ```bash
+  ollama pull qwen3-vl:2b
+  ```
+
+## Getting started
 
 ```bash
-# development
-$ npm run start
+npm install
 
-# watch mode
-$ npm run start:dev
+# Kafka, Kafka UI, SeaweedFS (S3) and Postgres
+docker compose up -d
 
-# production mode
-$ npm run start:prod
+# Create the tables
+npm run db:migrate
+
+# In separate terminals
+npm run start:dev      # API on http://localhost:3000
+npm run start:worker   # worker
 ```
 
-## Run tests
+The Kafka topic and the S3 bucket are created on startup if they don't exist.
+
+## API
+
+Swagger UI is served at <http://localhost:3000/api>.
+
+### `POST /` — queue a document
+
+Multipart form with `file` and `prompt`. Returns `202` with the IDs of the stored document and of the run:
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+curl -F "file=@report.pdf" -F "prompt=Summarize this document." http://localhost:3000/
 ```
 
-## Deployment
+```json
+{ "documentId": "…", "runId": "…" }
+```
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+Returns `415` if the file is missing or of an unsupported type, and `413` if it's over 20 MB.
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+### `GET /:runId` — get the result
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+curl http://localhost:3000/<runId>
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+```json
+{
+  "result": "…",
+  "prompt": "Summarize this document.",
+  "filename": "report.pdf"
+}
+```
 
-## Observability
+| Status | Meaning                                  |
+| ------ | ---------------------------------------- |
+| `200`  | The run is done.                         |
+| `400`  | `runId` is not a UUID.                   |
+| `404`  | No such run.                             |
+| `409`  | The run is queued, processing or failed. |
 
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
+> **Note:** the worker doesn't use the prompt yet. It's stored with the run, but the model is always asked to summarize the document (see `PROMPT` in `apps/worker/src/llm.service.ts`).
 
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
+## Processing and retries
 
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
+A run goes `queued` → `processing` → `done` or `failed`.
 
-## Resources
+- **Missing or unreadable file** (unsupported type, corrupt PDF, no text): the run fails right away with `retryable = false`.
+- **Other errors** (Ollama or storage unreachable): the worker retries up to 3 attempts in total, waiting 10 s and then 30 s. After the last one the run fails with `retryable = true`.
+- **Redelivered messages** for runs that are already `done` or `failed` are skipped. A run left in `processing` by a crashed worker is picked up again and counts as an attempt.
 
-Check out a few resources that may come in handy when working with NestJS:
+The error message and attempt count are stored on the run in `document_runs`.
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observer](https://observer.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+## Configuration
 
-## Support
+Everything has a default that matches `docker-compose.yml`, so no config is needed for local development. Variables are read from the process environment; `.env` files are not loaded.
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+| Variable               | Used by                  | Default                                                      |
+| ---------------------- | ------------------------ | ------------------------------------------------------------ |
+| `PORT`                 | API                      | `3000`                                                       |
+| `DATABASE_URL`         | API, worker, drizzle-kit | `postgres://llm_reader:llm_reader@localhost:5432/llm_reader` |
+| `KAFKA_BROKERS`        | API, worker              | `localhost:9092` (comma-separated)                           |
+| `S3_ENDPOINT`          | API, worker              | `http://localhost:8333`                                      |
+| `S3_REGION`            | API, worker              | `us-east-1`                                                  |
+| `S3_ACCESS_KEY_ID`     | API, worker              | `local`                                                      |
+| `S3_SECRET_ACCESS_KEY` | API, worker              | `local-secret`                                               |
+| `S3_BUCKET`            | API, worker              | `documents`                                                  |
+| `OLLAMA_URL`           | worker                   | `http://localhost:11434`                                     |
+| `OLLAMA_MODEL`         | worker                   | `qwen3-vl:2b`                                                |
+| `OLLAMA_NUM_CTX`       | worker                   | `32768`                                                      |
 
-## Stay in touch
+### Docker Compose ports
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+Host ports can be overridden with these variables. If you change one, point the matching app variable above at it too (e.g. `POSTGRES_PORT=5433` needs `DATABASE_URL=…@localhost:5433/…`).
 
-## License
+| Service         | Variable        | Default | Notes                                                     |
+| --------------- | --------------- | ------- | --------------------------------------------------------- |
+| Kafka           | `KAFKA_PORT`    | `9092`  |                                                           |
+| Kafka UI        | `KAFKA_UI_PORT` | `8080`  | Browse topics and messages.                               |
+| SeaweedFS S3    | `S3_PORT`       | `8333`  |                                                           |
+| SeaweedFS filer | `FILER_UI_PORT` | `8888`  | Browse stored files under `/buckets/`.                    |
+| Postgres        | `POSTGRES_PORT` | `5432`  | Also `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`. |
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+## Database
+
+The schema lives in `libs/db/src/schema.ts` and migrations in `libs/db/migrations`.
+
+```bash
+npm run db:generate   # create a migration after changing the schema
+npm run db:migrate    # apply migrations
+npm run db:studio     # browse the data in Drizzle Studio
+```
+
+## Tests
+
+```bash
+npm test              # unit tests
+npm run test:cov      # unit tests with coverage
+npm run test:e2e      # e2e tests
+```
+
+E2E tests talk to the real services, so start them and apply migrations first:
+
+```bash
+docker compose up -d
+npm run db:migrate
+```
