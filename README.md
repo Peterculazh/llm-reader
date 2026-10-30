@@ -77,7 +77,7 @@ Swagger UI is served at <http://localhost:3000/api>.
 
 ### `POST /` — queue a document
 
-Multipart form with `file` and `prompt`. Returns `202` with the IDs of the stored document and of the run:
+Multipart form with `file` and `prompt`. The prompt is sent to the model after the document's content. Returns `202` with the IDs of the stored document and of the run:
 
 ```bash
 curl -F "file=@report.pdf" -F "prompt=Summarize this document." http://localhost:3000/
@@ -87,7 +87,7 @@ curl -F "file=@report.pdf" -F "prompt=Summarize this document." http://localhost
 { "documentId": "…", "runId": "…" }
 ```
 
-Returns `415` if the file is missing or of an unsupported type, and `413` if it's over 20 MB.
+Returns `400` if `prompt` is missing or empty, `415` if the file is missing or of an unsupported type, and `413` if it's over 20 MB.
 
 ### `GET /:runId` — get the result
 
@@ -109,8 +109,6 @@ curl http://localhost:3000/<runId>
 | `400`  | `runId` is not a UUID.                   |
 | `404`  | No such run.                             |
 | `409`  | The run is queued, processing or failed. |
-
-> **Note:** the worker doesn't use the prompt yet. It's stored with the run, but the model is always asked to summarize the document (see `PROMPT` in `apps/worker/src/llm.service.ts`).
 
 ## Processing and retries
 

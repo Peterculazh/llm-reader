@@ -68,7 +68,7 @@ export class WorkerService implements OnModuleInit {
       const content = await toDocumentContent(
         await this.storage.get(document.storageKey),
       );
-      answer = await this.llm.readDocument(content);
+      answer = await this.llm.readDocument(content, run.prompt);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       // Retrying won't bring the file back or make it readable, so fail the

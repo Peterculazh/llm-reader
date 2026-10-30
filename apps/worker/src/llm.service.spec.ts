@@ -25,10 +25,10 @@ describe('LlmService', () => {
       ),
     );
 
-    const answer = await new LlmService().readDocument({
-      title: 'a.txt',
-      text: 'some text',
-    });
+    const answer = await new LlmService().readDocument(
+      { title: 'a.txt', text: 'some text' },
+      'What is it about?',
+    );
 
     expect(answer).toBe('Hello world');
     const [url, init] = fetchMock.mock.calls[0];
@@ -39,20 +39,23 @@ describe('LlmService', () => {
       stream: true,
       options: { num_ctx: 32768 },
     });
-    expect(body.messages[0].content).toContain('some text');
+    expect(body.messages[0].content).toMatch(
+      /some text[\s\S]*What is it about\?$/,
+    );
   });
 
   it('attaches scanned pages as images', async () => {
     fetchMock.mockResolvedValue(ndjson({ done: true, done_reason: 'stop' }));
 
-    await new LlmService().readDocument({
-      title: 'scan.pdf',
-      images: ['cGFnZTE=', 'cGFnZTI='],
-    });
+    await new LlmService().readDocument(
+      { title: 'scan.pdf', images: ['cGFnZTE=', 'cGFnZTI='] },
+      'What is it about?',
+    );
 
     const body = JSON.parse(fetchMock.mock.calls[0][1]!.body as string);
     expect(body.messages[0].images).toEqual(['cGFnZTE=', 'cGFnZTI=']);
     expect(body.messages[0].content).toContain('scan.pdf');
+    expect(body.messages[0].content).toContain('What is it about?');
   });
 
   it('throws on an Ollama error', async () => {
@@ -61,7 +64,7 @@ describe('LlmService', () => {
     );
 
     await expect(
-      new LlmService().readDocument({ title: 'a.txt', text: 'x' }),
+      new LlmService().readDocument({ title: 'a.txt', text: 'x' }, 'p'),
     ).rejects.toThrow('Ollama 404: model "x" not found');
   });
 
@@ -69,7 +72,7 @@ describe('LlmService', () => {
     fetchMock.mockResolvedValue(ndjson({ error: 'out of memory' }));
 
     await expect(
-      new LlmService().readDocument({ title: 'a.txt', text: 'x' }),
+      new LlmService().readDocument({ title: 'a.txt', text: 'x' }, 'p'),
     ).rejects.toThrow('Ollama: out of memory');
   });
 });
