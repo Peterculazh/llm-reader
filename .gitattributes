@@ -1,0 +1,3 @@
+# Keep autocrlf from rewriting line endings inside binary fixtures.
+*.pdf binary
+*.docx binary

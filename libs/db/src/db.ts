@@ -1,0 +1,7 @@
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import type * as schema from './schema.js';
+
+export type Db = NodePgDatabase<typeof schema>;
+
+// Db is a type, so it can't be the DI token: inject with @Inject(DB).
+export const DB = Symbol('DB');

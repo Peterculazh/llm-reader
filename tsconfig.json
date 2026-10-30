@@ -40,6 +40,12 @@
       ],
       "@app/contracts/*": [
         "./libs/contracts/src/*"
+      ],
+      "@app/db": [
+        "./libs/db/src/index.ts"
+      ],
+      "@app/db/*": [
+        "./libs/db/src/*"
       ]
     }
   }
