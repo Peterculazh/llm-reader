@@ -1,0 +1,46 @@
+{
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "resolvePackageJsonExports": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "declaration": true,
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "target": "ES2023",
+    "sourceMap": true,
+    "outDir": "./dist",
+    "incremental": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "strictPropertyInitialization": false,
+    "types": [
+      "vitest/globals",
+      "node",
+      "multer"
+    ],
+    "paths": {
+      "@app/events": [
+        "./libs/events/src/index.ts"
+      ],
+      "@app/events/*": [
+        "./libs/events/src/*"
+      ],
+      "@app/storage": [
+        "./libs/storage/src/index.ts"
+      ],
+      "@app/storage/*": [
+        "./libs/storage/src/*"
+      ],
+      "@app/contracts": [
+        "./libs/contracts/src/index.ts"
+      ],
+      "@app/contracts/*": [
+        "./libs/contracts/src/*"
+      ]
+    }
+  }
+}
