@@ -79,10 +79,10 @@ describe('WorkerService', () => {
     expect(documents.findRun).toHaveBeenCalledWith('run-1');
     expect(documents.markProcessing).toHaveBeenCalledWith('run-1');
     expect(storage.get).toHaveBeenCalledWith('documents/abc');
-    expect(llm.readDocument).toHaveBeenCalledWith({
-      title: 'a.txt',
-      text: 'hello',
-    });
+    expect(llm.readDocument).toHaveBeenCalledWith(
+      { title: 'a.txt', text: 'hello' },
+      'Summarize it',
+    );
     expect(documents.markDone).toHaveBeenCalledWith('run-1', 'a greeting');
   });
 

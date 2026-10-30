@@ -4,9 +4,6 @@ import { Readable } from 'node:stream';
 import type { ReadableStream } from 'node:stream/web';
 import { DocumentContent } from './document-content.js';
 
-// TODO: placeholder task until we decide what the LLM does with a document.
-const PROMPT = 'Summarize this document.';
-
 interface OllamaChatChunk {
   message?: { content?: string };
   done?: boolean;
@@ -23,7 +20,10 @@ export class LlmService {
   // fit, so set it explicitly.
   private readonly numCtx = Number(process.env.OLLAMA_NUM_CTX ?? 32768);
 
-  async readDocument(document: DocumentContent): Promise<string> {
+  async readDocument(
+    document: DocumentContent,
+    prompt: string,
+  ): Promise<string> {
     const { title } = document;
     // Rough 4-chars-per-token estimate, just to make truncation visible.
     if ('text' in document && document.text.length / 4 > this.numCtx) {
@@ -41,7 +41,7 @@ export class LlmService {
         model: this.model,
         stream: true,
         options: { num_ctx: this.numCtx },
-        messages: [toMessage(document)],
+        messages: [toMessage(document, prompt)],
       }),
     });
     if (!res.ok || !res.body) {
@@ -66,17 +66,17 @@ export class LlmService {
   }
 }
 
-function toMessage(document: DocumentContent) {
+function toMessage(document: DocumentContent, prompt: string) {
   if ('images' in document) {
     return {
       role: 'user',
-      content: `The pages of "${document.title}" are attached as images, in order.\n\n${PROMPT}`,
+      content: `The pages of "${document.title}" are attached as images, in order.\n\n${prompt}`,
       images: document.images,
     };
   }
   // Document first, question last.
   return {
     role: 'user',
-    content: `<document title="${document.title}">\n${document.text}\n</document>\n\n${PROMPT}`,
+    content: `<document title="${document.title}">\n${document.text}\n</document>\n\n${prompt}`,
   };
 }

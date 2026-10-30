@@ -1,4 +1,5 @@
-import { Module } from '@nestjs/common';
+import { Module, ValidationPipe } from '@nestjs/common';
+import { APP_PIPE } from '@nestjs/core';
 import { DbModule } from '@app/db';
 import { EventsModule } from '@app/events';
 import { StorageModule } from '@app/storage';
@@ -12,6 +13,11 @@ import { AppService } from './app.service.js';
     DbModule.register(),
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // Registered here rather than in main.ts so tests that boot AppModule
+    // validate DTOs too.
+    { provide: APP_PIPE, useValue: new ValidationPipe() },
+  ],
 })
 export class AppModule {}
