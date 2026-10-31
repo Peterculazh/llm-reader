@@ -41,6 +41,11 @@ export class AppService {
     return { documentId, runId };
   }
 
+  // No auth yet, so every caller sees every run.
+  listDocuments() {
+    return this.documents.listRuns();
+  }
+
   async getDocumentResult(
     runId: string,
   ): Promise<{ result: string | null; prompt: string; filename: string }> {

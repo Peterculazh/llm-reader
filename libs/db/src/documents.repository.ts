@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { eq, sql } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import { DB, type Db } from './db.js';
 import { documentRuns, documents, NewDocument } from './schema.js';
 
@@ -28,6 +28,27 @@ export class DocumentsRepository {
       .innerJoin(documents, eq(documentRuns.documentId, documents.id))
       .where(eq(documentRuns.id, runId));
     return row;
+  }
+
+  /** Every run with its document, newest first. Answers are left out: they
+   * can be long, and GET /:runId returns them. */
+  async listRuns() {
+    return this.db
+      .select({
+        runId: documentRuns.id,
+        documentId: documents.id,
+        filename: documents.filename,
+        contentType: documents.contentType,
+        sizeBytes: documents.sizeBytes,
+        prompt: documentRuns.prompt,
+        status: documentRuns.status,
+        error: documentRuns.error,
+        createdAt: documentRuns.createdAt,
+        updatedAt: documentRuns.updatedAt,
+      })
+      .from(documentRuns)
+      .innerJoin(documents, eq(documentRuns.documentId, documents.id))
+      .orderBy(desc(documentRuns.createdAt));
   }
 
   /** Counts the attempt and returns its number, starting at 1. */

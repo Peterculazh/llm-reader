@@ -8,7 +8,7 @@ import { AppService } from './app.service.js';
 
 describe('AppController', () => {
   let appController: AppController;
-  const documents = { findRun: vi.fn() };
+  const documents = { findRun: vi.fn(), listRuns: vi.fn() };
 
   const found = (status: string, answer: string | null = null) => ({
     run: { id: 'run-1', prompt: 'Summarize it', status, answer },
@@ -28,6 +28,15 @@ describe('AppController', () => {
     }).compile();
 
     appController = app.get(AppController);
+  });
+
+  describe('listDocuments', () => {
+    it('returns every run', async () => {
+      const runs = [{ runId: 'run-1', filename: 'a.txt', status: 'done' }];
+      documents.listRuns.mockResolvedValue(runs);
+
+      await expect(appController.listDocuments()).resolves.toEqual(runs);
+    });
   });
 
   describe('getDocumentResult', () => {
