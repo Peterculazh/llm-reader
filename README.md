@@ -89,6 +89,31 @@ curl -F "file=@report.pdf" -F "prompt=Summarize this document." http://localhost
 
 Returns `400` if `prompt` is missing or empty, `415` if the file is missing or of an unsupported type, and `413` if it's over 20 MB.
 
+### `GET /all` — list documents
+
+Every run with its document, newest first. There is no auth yet, so this returns everyone's uploads. Answers are left out; fetch them with `GET /:runId`.
+
+```bash
+curl http://localhost:3000/all
+```
+
+```json
+[
+  {
+    "runId": "…",
+    "documentId": "…",
+    "filename": "report.pdf",
+    "contentType": "application/pdf",
+    "sizeBytes": 48213,
+    "prompt": "Summarize this document.",
+    "status": "done",
+    "error": null,
+    "createdAt": "2026-10-30T14:05:31.000Z",
+    "updatedAt": "2026-10-30T14:05:52.000Z"
+  }
+]
+```
+
 ### `GET /:runId` — get the result
 
 ```bash

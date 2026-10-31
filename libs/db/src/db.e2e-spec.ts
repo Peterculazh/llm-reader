@@ -83,6 +83,23 @@ describe('Postgres (e2e)', () => {
     });
   }, 30_000);
 
+  it('lists runs newest first, without answers', async () => {
+    const older = await create();
+    const newer = await create();
+    await documents.markDone(older, 'an answer');
+
+    const runs = await documents.listRuns();
+    const ids = runs.map((run) => run.runId);
+
+    expect(ids.indexOf(newer)).toBeLessThan(ids.indexOf(older));
+    expect(runs.find((run) => run.runId === older)).toMatchObject({
+      filename: 'отчёт 2026.pdf',
+      prompt: 'Summarize it',
+      status: 'done',
+    });
+    expect(runs[0]).not.toHaveProperty('answer');
+  }, 30_000);
+
   it('returns undefined for a missing run', async () => {
     await expect(documents.findRun(randomUUID())).resolves.toBeUndefined();
   }, 30_000);

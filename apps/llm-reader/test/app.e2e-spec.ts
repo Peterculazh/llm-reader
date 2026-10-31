@@ -42,6 +42,26 @@ describe('AppController (e2e)', () => {
     await request(app.getHttpServer()).get(`/${res.body.runId}`).expect(409);
   });
 
+  it('lists an uploaded document', async () => {
+    const {
+      body: { runId },
+    } = await request(app.getHttpServer())
+      .post('/')
+      .field('prompt', 'Summarize it')
+      .attach('file', Buffer.from('hello'), textFile)
+      .expect(202);
+
+    const res = await request(app.getHttpServer()).get('/all').expect(200);
+
+    expect(res.body).toContainEqual(
+      expect.objectContaining({
+        runId,
+        filename: 'a.txt',
+        prompt: 'Summarize it',
+      }),
+    );
+  });
+
   it('rejects an upload without a prompt', () => {
     return request(app.getHttpServer())
       .post('/')

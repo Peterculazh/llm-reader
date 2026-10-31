@@ -57,6 +57,13 @@ export class AppController {
     return this.appService.processDocument({ file, prompt: dto.prompt });
   }
 
+  // Declared before :runId, which would otherwise match "all".
+  @Get('all')
+  @ApiOkResponse({ description: 'Every run with its document, newest first' })
+  listDocuments() {
+    return this.appService.listDocuments();
+  }
+
   @Get(':runId')
   @ApiOkResponse({ description: 'Run found and done' })
   @ApiBadRequestResponse({ description: 'runId is not a UUID' })
